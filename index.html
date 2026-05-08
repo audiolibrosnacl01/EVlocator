@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>EKG Locator</title>
+    <style>
+        :root { --blue: #007AFF; --bg: #F2F2F7; }
+        body { 
+            font-family: -apple-system, system-ui, sans-serif; 
+            background: var(--bg); margin: 0; padding: 0;
+            display: flex; flex-direction: column; height: 100vh;
+        }
+        .header {
+            background: white; padding: calc(env(safe-area-inset-top) + 15px) 20px 15px;
+            border-bottom: 0.5px solid #C6C6C8; display: flex; justify-content: space-between; align-items: center;
+        }
+        .container { padding: 20px; flex: 1; overflow-y: auto; }
+        .card { 
+            background: white; border-radius: 12px; padding: 20px; margin-bottom: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1); border: none; width: 100%;
+            text-align: left; font-size: 17px; font-weight: 600; display: flex; justify-content: space-between;
+        }
+        .card:active { background: #E5E5EA; }
+        .result-box {
+            background: white; border-radius: 20px; padding: 40px 20px; text-align: center;
+            border: 2px solid var(--blue); box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+        }
+        .wa-btn {
+            background: #25D366; color: white; text-decoration: none; padding: 18px;
+            border-radius: 15px; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; margin-top: 30px; gap: 10px;
+        }
+        .step { font-size: 11px; color: #8E8E93; font-weight: 800; text-transform: uppercase; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 style="margin:0; font-size:20px;">EKG <span style="color:var(--blue)">Locator</span></h1>
+        <button onclick="nav.reset()" style="color:var(--blue); background:none; border:none; font-weight:bold;">Reiniciar</button>
+    </div>
+
+    <div class="container">
+        <div id="view-step">
+            <div id="progress" class="step">Paso 1</div>
+            <h2 id="question" style="margin: 0 0 20px 0; font-size: 22px;"></h2>
+            <div id="options"></div>
+        </div>
+
+        <div id="view-result" style="display:none;">
+            <div class="result-box">
+                <div class="step">Localización Probable</div>
+                <h2 id="final-result" style="font-size: 28px; margin: 15px 0 35px 0; color: #1C1C1E;"></h2>
+                <button onclick="nav.reset()" style="width:100%; padding:15px; border-radius:10px; border:none; background:#1C1C1E; color:white; font-weight:bold;">Nuevo Análisis</button>
+            </div>
+        </div>
+
+        <a id="wa" href="#" target="_blank" class="wa-btn">
+            Contactar al Dr. Maldonado
+        </a>
+    </div>
+
+    <script>
+        const tree = {
+            start: { t: "¿Morfología en V1?", o: [{l:"BRI (Negativo)",n:"bri"},{l:"BRD (Positivo)",n:"brd"}]},
+            bri: { t: "Cara Inferior", o: [{l:"Positiva (+)",n:"bri_p"},{l:"Negativa (-)",n:"bri_n"},{l:"Eje Mix (DII+/DIII-)",n:"bri_m"}]},
+            bri_p: { t: "Derivación DI", o: [{l:"DI (+) y DII > DIII",n:"bri_p_l"},{l:"DI (-) y DIII > DII",n:"bri_p_r"}]},
+            bri_p_l: { t: "Transición", o: [{l:"< V2",r:"Seno Coronario Derecho (SCD)"},{l:"V2-V3",n:"bri_avl"},{l:"> V4",r:"TSVD Posterior"}]},
+            bri_avl: { t: "Criterio aVL", o: [{l:"aVL (+)",r:"Parahisiana"},{l:"aVL (-)",r:"SCD / TSVD Post"}]},
+            bri_p_r: { t: "Transición", o: [{l:"< V2",n:"bri_sp"},{l:"> V3",r:"TSVD Anterior"}]},
+            bri_sp: { t: "Signo", o: [{l:"Pseudo Delta",r:"Summit VI"},{l:"R Pura en V1",r:"Seno Coronario Izq (SCI)"}]},
+            bri_n: { t: "Transición", o: [{l:"< V3",r:"Septal / AT Septal"},{l:"> V4",r:"Banda Moderadora / AT p libre"}]},
+            bri_m: { t: "Transición", o: [{l:"V2-V3",r:"Parahisiana"},{l:"> V4",n:"bri_v1_f"}]},
+            bri_v1_f: { t: "Morfología V1", o: [{l:"V1 tipo rS",r:"AT Lateral"},{l:"V1 tipo QS",r:"Banda Moderadora"}]},
+            brd: { t: "Cara Inferior", o: [{l:"Positiva (+)",n:"brd_p"},{l:"Negativa (-)",n:"brd_n"},{l:"DII- / DIII+",n:"brd_s"}]},
+            brd_p: { t: "Transición", o: [{l:"V3-V4",n:"brd_p_q"},{l:"> V5",r:"Anillo Mitral Lateral"}]},
+            brd_p_q: { t: "QRS", o: [{l:"< 140ms",r:"TV Fascicular Anterior (TVFA)"},{l:"> 140ms",r:"Músculo Papilar Anterior (MPA)"}]},
+            brd_n: { t: "Transición", o: [{l:"V3-V4",n:"brd_n_q"},{l:"> V5",r:"Anillo Mitral Posterior (AMP)"}]},
+            brd_n_q: { t: "QRS", o: [{l:"< 140ms",r:"TV Fascicular Posterior (TVFP)"},{l:"> 140ms",r:"Músculo Papilar Posterior (MPP)"}]},
+            brd_s: { t: "Transición", o: [{l:"< V4",r:"Músculo Papilar Anterior (MPA)"},{l:"> V5",r:"Anillo Mitral Lateral"}]}
+        };
+
+        const nav = {
+            curr: 'start', hist: [],
+            init() {
+                const wa = document.getElementById('wa');
+                const msg = encodeURIComponent("Buenas tardes Dr. Maldonado, vengo desde su aplicación de TSV, quería consultarle");
+                wa.href = `https://wa.me/541132852520?text=${msg}`;
+                this.render();
+            },
+            render() {
+                const s = tree[this.curr];
+                document.getElementById('view-step').style.display = 'block';
+                document.getElementById('view-result').style.display = 'none';
+                document.getElementById('progress').innerText = `PASO ${this.hist.length + 1}`;
+                document.getElementById('question').innerText = s.t;
+                let html = '';
+                s.o.forEach(o => {
+                    html += `<button class="card" onclick="nav.go('${o.n}','${o.r}')"><span>${o.l}</span><span style="color:var(--blue)">›</span></button>`;
+                });
+                document.getElementById('options').innerHTML = html;
+            },
+            go(n, r) {
+                if (r && r !== 'undefined') {
+                    document.getElementById('view-step').style.display = 'none';
+                    document.getElementById('view-result').style.display = 'block';
+                    document.getElementById('final-result').innerText = r;
+                } else {
+                    this.hist.push(this.curr);
+                    this.curr = n;
+                    this.render();
+                }
+            },
+            reset() { this.curr = 'start'; this.hist = []; this.render(); }
+        };
+        nav.init();
+    </script>
+</body>
+</html>
